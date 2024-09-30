@@ -1,4 +1,4 @@
-package main
+package serverclient
 
 type commandID int
 
