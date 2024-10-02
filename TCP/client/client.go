@@ -7,30 +7,41 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 )
 
 func main() {
+	scanner := bufio.NewScanner(os.Stdin) // 스캐너 입력
+	input := new(string)
 
-	var
+	fmt.Println("연결할 ip를 입력하세요.")
+	if scanner.Scan() { //입력받은 문자열 처리
 
-	listener, err := net.Listen("tcp", "127.0.0.1:") // 네트워크 연결
+		*input = scanner.Text()
+		*input += ":8080"
+
+	}
+
+	listener, err := net.Listen("tcp", *input) // 네트워크 연결
+	var jsm jsonfile.Making_message
 	mtx := sync.Mutex{}
+
 	if err != nil {
-		fmt.Errorf("%s", err)
+		fmt.Printf("%s\n", err)
 	}
 	defer listener.Close()
 
-	scanner := bufio.NewScanner(os.Stdin) // 스캐너 입력
 	done := make(chan struct{})
 
 	for {
+
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Errorf("%s", err)
+			fmt.Printf("%s\n", err)
 			return
 		}
-
+		go handleConnection(conn, &mtx, scanner, jsm, done)
 	}
 }
 func handleConnection(conn net.Conn, mtx *sync.Mutex, scanner *bufio.Scanner, jsm jsonfile.Making_message, done chan struct{}) {
@@ -60,6 +71,7 @@ func handleConnection(conn net.Conn, mtx *sync.Mutex, scanner *bufio.Scanner, js
 		conn.Write(B)
 
 	}()
+	mtx.Unlock()
 
 	// json 해제 및 읽기
 	mtx.Lock()
@@ -71,6 +83,15 @@ func handleConnection(conn net.Conn, mtx *sync.Mutex, scanner *bufio.Scanner, js
 		}
 
 		err, message := jsm.UnSerialize(receive)
+		if err != nil {
+			fmt.Printf(" 알아들을 수 없음: %s\n", err)
+		}
 		fmt.Println(message.Talk)
+
+		if strings.Contains(message.Talk, "/quit") {
+			fmt.Println("프로그램을 종료합니다.")
+			close(done)
+		}
 	}()
+	mtx.Unlock()
 }
