@@ -3,81 +3,72 @@ package main
 import (
 	"bufio"
 	"fmt"
-	jsonfile "github/messager/TCP/json_file"
 	"net"
 	"os"
 	"sync"
 )
 
 func main() {
-	scanner := bufio.NewScanner(os.Stdin) // 스캐너 입력
-	input := new(string)
-
-	fmt.Println("연결할 ip를 입력하세요.")
-	if scanner.Scan() { //입력받은 문자열 처리
-
-		*input = scanner.Text()
-		*input += ":8080"
-
-	}
-
-	listener, err := net.Listen("tcp", *input) // 네트워크 연결
-	var jsm jsonfile.Making_message
-	mtx := sync.Mutex{}
-
+	// 서버에 연결할 IP와 포트 설정
+	address := "localhost:8080"
+	var wg sync.WaitGroup
+	conn, err := net.Dial("tcp", address) // TCP 연결
 	if err != nil {
-		fmt.Printf("%s\n", err)
-	}
-	defer listener.Close()
-
-	done := make(chan struct{})
-
-	for {
-
-		conn, err := listener.Accept()
-		if conn != nil {
-			fmt.Println("연결 완료!")
-		}
-		if err != nil {
-			fmt.Printf("%s\n", err)
-			return
-		}
-		go handleConnection(conn, &mtx, scanner, jsm, done)
-	}
-}
-func handleConnection(conn net.Conn, mtx *sync.Mutex, scanner *bufio.Scanner, jsm jsonfile.Making_message, done chan struct{}) {
-	defer conn.Close()
-	receive := make([]byte, 1024) // 수신할 데이터 버퍼
-
-	// 데이터 수신 처리
-	n, err := conn.Read(receive)
-	if err != nil {
-		fmt.Println("데이터 수신 오류:", err)
+		fmt.Printf("서버에 연결할 수 없습니다: %s\n", err)
 		return
 	}
+	done := make(chan struct{})
 
-	// 수신된 데이터 출력
-	mtx.Lock()
-	fmt.Println("수신된 데이터:", string(receive[:n])) // 실제로 읽은 만큼만 출력
-	mtx.Unlock()
+	defer conn.Close() // 클라이언트 종료 시 연결 닫기
 
-	// 사용자 입력 처리
-	if scanner.Scan() {
-		mtx.Lock()
+	fmt.Println("서버에 연결되었습니다. 메시지를 입력하세요.")
+
+	scanner := bufio.NewScanner(os.Stdin) // 사용자 입력을 위한 스캐너 생성
+
+	wg.Add(2)
+	go WriteResponse(scanner, &conn, &wg, done)
+	go readResponses(conn, &wg) // 서버 응답을 읽는 고루틴 시작
+	if _, boolean := <-done; boolean {
+		return
+	}
+	wg.Wait()
+
+}
+
+func WriteResponse(scanner *bufio.Scanner, conn *net.Conn, wg *sync.WaitGroup, done chan struct{}) {
+	defer wg.Done()
+	for {
+		scanner.Scan() // 사용자 입력 대기
 		input := scanner.Text()
-		if input != "" {
-			// JSON 메시지 직렬화 및 전송
-			go func(c net.Conn, in string) {
-				defer mtx.Lock()   // 데이터 전송 전에 잠금
-				defer mtx.Unlock() // 데이터 전송 후 잠금 해제
 
-				B := []byte(in) // 단순 문자열을 전송 (JSON 직렬화 생략)
-				_, err := c.Write(B)
-				if err != nil {
-					fmt.Println("데이터 전송 오류:", err)
-				}
-			}(conn, input)
+		if input == "exit" { // 'exit' 입력 시 종료
+			fmt.Println("클라이언트 종료.")
+			fmt.Fprintf(*conn, "%s\n", input)
+			done <- struct{}{}
+			continue
+
 		}
-		mtx.Unlock()
+
+		// 메시지를 서버로 전송
+		_, err := fmt.Fprintf(*conn, "%s\n", input)
+		if err != nil {
+			continue
+		} else {
+			fmt.Println(input)
+		}
+	}
+}
+
+// 서버로부터의 응답을 읽는 함수
+func readResponses(conn net.Conn, wg *sync.WaitGroup) {
+	defer wg.Done()
+	reader := bufio.NewReader(conn) // 수신 리더 생성
+	for {
+		response, err := reader.ReadString('\n') // 서버로부터의 응답 수신
+		if err != nil {
+			fmt.Println("서버와의 연결이 종료되었습니다:", err)
+			return
+		}
+		fmt.Println("서버로부터 수신된 메시지:", response) // 수신된 메시지 출력
 	}
 }

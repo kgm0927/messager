@@ -14,7 +14,7 @@ func main() {
 	s := serverclient.NewServer()
 	go s.Run(jsonserialize)
 
-	listener, err := net.Listen("tcp", ":8080")
+	listener, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err != nil {
 		log.Fatalf("unable to start server: %s", err.Error())
 	}
