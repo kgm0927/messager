@@ -6,8 +6,9 @@ import (
 
 type Message struct {
 	Room_name   string `json:"Room"`
-	Client_name string `json:"client"`
-	Talk        string `json:"talk"`
+	Client_name string `json:"client"` // 클라이언트 이름
+	Args        string `json:"talk"`   //
+	Id          int    // 실행 명령
 }
 
 type Making_message interface {
@@ -17,10 +18,10 @@ type Making_message interface {
 	Return_self() *Message
 }
 
-func (M *Message) Initialize(sentences ...string) {
+func (M *Message) Initialize(sentences ...any) {
 	M.Room_name = sentences[0]
 	M.Client_name = sentences[1]
-	M.Talk = sentences[2]
+
 }
 
 func (M *Message) Serialize() (error, []byte) {

@@ -2,14 +2,11 @@ package main
 
 import (
 	serverclient "github/messager/TCP/Server_client"
-	jsonfile "github/messager/TCP/json_file"
 	"log"
 	"net"
 )
 
 func main() {
-
-	jsonserialize := new(jsonfile.Making_message)
 
 	s := serverclient.NewServer()
 	go s.Run(jsonserialize)
@@ -30,6 +27,6 @@ func main() {
 		}
 
 		c := s.NewClient(conn)
-		go c.ReadInput(*jsonserialize)
+		go c.ReadInput()
 	}
 }

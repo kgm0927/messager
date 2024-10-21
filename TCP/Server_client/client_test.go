@@ -13,7 +13,7 @@ func Testclient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	C := client{conn:&net.TCPConn{},"김민",room: &room{name:"1",},commands: ,message:}
+	C := client{conn:&net.TCPConn{},"김민",room: &room{name:"1",},commands: "메시지" ,message:}
 	var jmm jsonfile.Making_message
 
 	C.Insert_message(&M)
