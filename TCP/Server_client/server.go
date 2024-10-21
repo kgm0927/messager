@@ -10,29 +10,48 @@ import (
 
 type server struct {
 	rooms    map[string]*room
-	commands chan command
+	commands chan jsonfile.Message
 }
 
 func NewServer() *server {
 	return &server{
 		rooms:    make(map[string]*room),
-		commands: make(chan command),
+		commands: make(chan jsonfile.Message),
 	}
 }
+func (s *server) searching_member_client(member *jsonfile.Message) *client {
+	room := s.rooms[member.Room_name]
 
-func (s *server) Run(jfm *jsonfile.Making_message) {
-	for cmd := range s.commands {
-		switch cmd.id {
-		case CMD_NICK:
-			s.nick(cmd.client, cmd.args)
-		case CMD_JOIN:
-			s.join(cmd.client, cmd.args)
-		case CMD_ROOMS:
-			s.listRooms(cmd.client)
-		case CMD_MSG:
-			s.msg(cmd.client, cmd.args)
-		case CMD_QUIT:
-			s.quit(cmd.client)
+	for address, client := range room.members {
+		if address.String() == member.Ip {
+			return client
+		} else {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (s *server) Run() {
+	for cmd := range s.commands { // 여기서 받은 json파일을 분해해야만 한다.
+
+		client := s.searching_member_client(&cmd)
+		msg := cmd.Args
+		switch cmd.Id {
+		case int(CMD_NICK):
+			s.nick(client, cmd) // 메시지 전달
+
+		case int(CMD_JOIN):
+			s.join(client, cmd) // 방 입장
+
+		case int(CMD_ROOMS):
+			s.listRooms(client) //
+
+		case int(CMD_MSG):
+			s.msg(client, msg)
+
+		case int(CMD_QUIT):
+			s.quit(client)
 		}
 	}
 }
@@ -43,27 +62,28 @@ func (s *server) NewClient(conn net.Conn) *client {
 	return &client{
 		conn:     conn,
 		nick:     "anonymous",
-		commands: s.commands,
+		room:     nil,
+		Commands: s.commands,
 	}
 }
 
-func (s *server) nick(c *client, args []string) {
-	if len(args) < 2 {
+func (s *server) nick(c *client, cmd jsonfile.Message) {
+	if len(cmd.Client_name) < 2 || cmd.Client_name == "anonymous" {
 		c.msg("nick is required. usage: /nick NAME") // 메시지 보냄
 		return
 	}
 
-	c.nick = args[1]
+	c.nick = cmd.Args
 	c.msg(fmt.Sprintf("all right, I will call you %s", c.nick))
 }
 
-func (s *server) join(c *client, args []string) {
-	if len(args) < 2 {
+func (s *server) join(c *client, cmd jsonfile.Message) {
+	if len(cmd.Args) < 2 {
 		c.msg("room name is required. usage: /join ROOM_NAME")
 		return
 	}
 
-	roomName := args[1]
+	roomName := cmd.Args
 
 	r, ok := s.rooms[roomName]
 	if !ok {
@@ -92,14 +112,23 @@ func (s *server) listRooms(c *client) {
 	c.msg(fmt.Sprintf("available rooms: %s", strings.Join(rooms, ", ")))
 }
 
-func (s *server) msg(c *client, args []string) {
-	if len(args) < 2 {
+func (s *server) msg(c *client, msg string) {
+
+	if c.room == nil {
+		fmt.Println("들어갈 방을 먼저 선택하세요.")
+	}
+
+	if c.nick == "" || c.nick == "anonymous" {
+		fmt.Println("이름을 설정해 주시기 바랍니다. ")
+	}
+
+	if len(msg) < 2 {
 		c.msg("message is required, usage: /msg MSG")
 		return
 	}
 
-	msg := strings.Join(args[1:], " ")
-	c.room.broadcast(c, c.nick+": "+msg)
+	// msg := strings.Join(args[1:], " ")
+	c.room.broadcast(c, c.nick+": "+msg) // 메시지 수정 전달 // room.go로 이동
 }
 
 func (s *server) quit(c *client) {

@@ -8,7 +8,8 @@ type Message struct {
 	Room_name   string `json:"Room"`
 	Client_name string `json:"client"` // 클라이언트 이름
 	Args        string `json:"talk"`   //
-	Id          int    // 실행 명령
+	Ip          string `json:"ip"`
+	Id          int    `json:"id"` // 실행 명령
 }
 
 type Making_message interface {
@@ -19,27 +20,30 @@ type Making_message interface {
 }
 
 func (M *Message) Initialize(sentences ...any) {
-	M.Room_name = sentences[0]
-	M.Client_name = sentences[1]
+	M.Room_name = sentences[0].(string)
+	M.Client_name = sentences[1].(string)
+	M.Args = sentences[2].(string)
+	M.Ip = sentences[3].(string)
+	M.Id = sentences[4].(int)
 
 }
 
-func (M *Message) Serialize() (error, []byte) {
+func (M *Message) Serialize() ([]byte, error) {
 	b, err := json.Marshal(M)
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, b
+	return b, nil
 }
 
-func (M *Message) UnSerialize(B []byte) (error, *Message) {
+func (M *Message) UnSerialize(B []byte) (*Message, error) {
 
 	err := json.Unmarshal(B, M)
 
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, M
+	return M, nil
 }
 
 func (M *Message) Return_self() *Message {

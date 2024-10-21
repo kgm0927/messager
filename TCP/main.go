@@ -9,7 +9,7 @@ import (
 func main() {
 
 	s := serverclient.NewServer()
-	go s.Run(jsonserialize)
+	go s.Run()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err != nil {

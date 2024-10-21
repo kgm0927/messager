@@ -12,8 +12,12 @@ func main() {
 	// 서버에 연결할 IP와 포트 설정
 
 	scanner := bufio.NewScanner(os.Stdin) // 사용자 입력을 위한 스캐너 생성
+	var address string
 
-	address := "localhost:8080"
+	if scanner.Scan() {
+		address += scanner.Text()
+		address += ":8080"
+	}
 
 	conn, err := net.Dial("tcp", address) // TCP 연결
 	if err != nil {

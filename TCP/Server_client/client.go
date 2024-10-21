@@ -58,36 +58,52 @@ func (c *client) ReadInput() { // 입력을 읽음.
 func (c *client) err(err error) {
 	// 다시 작성할 것
 }
-
-func (c *client) msg(msg string) { // 수정할 필요가 있어보임.
-
+func (c *client) Setting_message_sentence(msg string) (cmd string, args []string) {
 	msg = strings.Trim(msg, "\n") // 수정할 가능성이 있음.
 
-	args := strings.Split(msg, " ")
-	cmd := strings.TrimSpace(args[0])
+	args = strings.Split(msg, " ")
+	cmd = strings.TrimSpace(args[0])
+
+	var msg_new []string
+	if len(msg) > 1 {
+		msg_new = append(args[1:], args[2:]...)
+	} else {
+		msg_new = []string{cmd} // 인자가 하나만 있는 경우
+	}
+
+	return cmd, msg_new
+}
+
+func (c *client) Setting_Message_file(cmd string, msg []string) jsonfile.Message {
+	setting := new(jsonfile.Message)
 
 	cmd_num, err := Compare_cmd(cmd)
+
 	if err != nil {
 		fmt.Printf("%s", err)
 	}
-	if len(args) > 1 {
-		args = append(args[:1], args[1:]...)
-	} else {
-		args = []string{cmd} // 인자가 하나만 있는 경우
-	}
 
-	message := strings.Join(args, " ")
-	message = message + "\n"
+	setting.Id = cmd_num
+	setting.Args = strings.Join(msg, " ") // 나중에 문자열에 '>' 붙임
+	setting.Client_name = c.nick
+	setting.Room_name = c.room.name
+
+	return *setting
+
+}
+
+func (c *client) msg(msg string) { // 수정할 필요가 있어보임.
+
+	cmd, args := c.Setting_message_sentence(msg)
+
 	// ----------------------------------------------- 문자열 분석 및 id 출력
 
-	sending := jsonfile.Message{}
+	sending := c.Setting_Message_file(cmd, args)
+	B, err := sending.Serialize()
 
-	sending.Id = cmd_num
-	sending.Args = message
-	sending.Client_name = c.nick
-	sending.Room_name = c.room.name
-
-	err, B := sending.Serialize()
+	if err != nil {
+		fmt.Println("%s", err)
+	}
 
 	c.conn.Write(B)
 
