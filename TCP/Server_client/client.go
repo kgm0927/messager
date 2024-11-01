@@ -1,64 +1,82 @@
 package serverclient
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	jsonfile "github/messager/TCP/json_file"
 
 	"net"
 	"strings"
+
+	jsonfile "github.com/messager/TCP/json_file"
 )
 
-type client struct {
+type Client struct {
 	conn     net.Conn
 	nick     string
 	room     *room
 	Commands chan jsonfile.Message
 }
 
-func (c *client) Insert_message(M *jsonfile.Message) {
+func (c *Client) Insert_message(M *jsonfile.Message) {
 	c.Commands <- *M
 }
 
-func (c *client) Return_Message() chan<- jsonfile.Message {
+func (c *Client) Return_Message() chan<- jsonfile.Message {
 	return c.Commands
 }
 
-func (c *client) ReadInput() { // 입력을 읽음.
-	// mi는 인터페이스이므로, 구조체를 직접 할당할 수 없습니다.
-	var reading jsonfile.Message
-	err := json.NewDecoder(c.conn).Decode(&reading)
+func (c *Client) ReadInput() { // 입력을 읽음.
 
-	if err != nil {
-		fmt.Println(err)
-	}
-	reading.Args = strings.Trim(reading.Args, "/n")
-	cmd := reading.Id
+	for { // mi는 인터페이스이므로, 구조체를 직접 할당할 수 없습니다.
+		var reading jsonfile.Message
+		fmt.Println("읽고 있는 중 ,ReadInput")
+		var B []byte
+		var err error
 
-	switch cmd {
-	case int(CMD_NICK):
-		c.Commands <- reading
+		err = json.NewDecoder(c.conn).Decode(&reading)
+		if err != nil {
+			fmt.Println("수신불가")
+		}
+		fmt.Println(reading)
+		//////////////////
+		B = bytes.Trim(B, "\x00") // 필요 시 trim
+		//////////////////
+		err = json.Unmarshal(B, &reading)
 
-	case int(CMD_JOIN):
-		c.Commands <- reading
+		if err != nil {
+			fmt.Println("역직렬화 오류", err)
+			continue
+		}
 
-	case int(CMD_ROOMS):
-		c.Commands <- reading
+		reading.Args = strings.TrimSpace(reading.Args)
+		cmd := reading.Id
 
-	case int(CMD_MSG):
-		c.Commands <- reading
+		switch cmd {
+		case int(CMD_NICK):
+			c.Commands <- reading
 
-	case int(CMD_QUIT):
-		c.Commands <- reading
-	default:
-		c.err(fmt.Errorf("unknown command: %s", cmd))
+		case int(CMD_JOIN):
+			c.Commands <- reading
+
+		case int(CMD_ROOMS):
+			c.Commands <- reading
+
+		case int(CMD_MSG):
+			c.Commands <- reading
+
+		case int(CMD_QUIT):
+			c.Commands <- reading
+		default:
+			c.err(fmt.Errorf("unknown command: %s", cmd))
+		}
 	}
 }
 
-func (c *client) err(err error) {
+func (c *Client) err(err error) {
 	// 다시 작성할 것
 }
-func (c *client) Setting_message_sentence(msg string) (cmd string, args []string) {
+func (c *Client) Setting_message_sentence(msg string) (cmd string, args []string) {
 	msg = strings.Trim(msg, "\n") // 수정할 가능성이 있음.
 
 	args = strings.Split(msg, " ")
@@ -74,7 +92,7 @@ func (c *client) Setting_message_sentence(msg string) (cmd string, args []string
 	return cmd, msg_new
 }
 
-func (c *client) Setting_Message_file(cmd string, msg []string) jsonfile.Message {
+func (c *Client) Setting_Message_file(cmd string, msg []string) jsonfile.Message {
 	setting := new(jsonfile.Message)
 
 	cmd_num, err := Compare_cmd(cmd)
@@ -92,7 +110,7 @@ func (c *client) Setting_Message_file(cmd string, msg []string) jsonfile.Message
 
 }
 
-func (c *client) msg(msg string) { // 수정할 필요가 있어보임.
+func (c *Client) msg(msg string) { // 수정할 필요가 있어보임.
 
 	cmd, args := c.Setting_message_sentence(msg)
 
@@ -113,26 +131,34 @@ func Compare_cmd(cmd string) (int, error) {
 
 	switch cmd {
 	case "/nick": //0
-
+		fmt.Println("전달은 0, /nick")
 		return int(CMD_NICK), nil
 
 	case "/join": // 1
+		fmt.Println("전달은 1, /join")
 
 		return int(CMD_JOIN), nil
 
 	case "/rooms": // 2
+		fmt.Println("전달은 2, /rooms")
 
 		return int(CMD_ROOMS), nil
 
 	case "/msg": // 3
+		fmt.Println("전달은 3, /msg")
 
 		return int(CMD_MSG), nil
 
 	case "/quit": // 4
+		fmt.Println("전달은 4, /quit")
 
 		return int(CMD_QUIT), nil
 
 	default:
 		return 100, fmt.Errorf("올바른 문자가 아님")
 	}
+}
+
+func (c *Client) Return_connent() *net.Conn {
+	return &c.conn
 }

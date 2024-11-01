@@ -1,9 +1,10 @@
 package main
 
 import (
-	serverclient "github/messager/TCP/Server_client"
 	"log"
 	"net"
+
+	serverclient "github.com/messager/TCP/Server_client"
 )
 
 func main() {
@@ -21,12 +22,14 @@ func main() {
 
 	for {
 		conn, err := listener.Accept()
+
 		if err != nil {
 			log.Printf("failed to accept connection: %s", err.Error())
 			continue
 		}
-
 		c := s.NewClient(conn)
+
 		go c.ReadInput()
+
 	}
 }

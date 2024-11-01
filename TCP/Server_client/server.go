@@ -2,14 +2,18 @@ package serverclient
 
 import (
 	"fmt"
-	jsonfile "github/messager/TCP/json_file"
 	"log"
 	"net"
 	"strings"
+
+	jsonfile "github.com/messager/TCP/json_file"
 )
 
 type server struct {
-	rooms    map[string]*room
+	rooms map[string]*room
+
+	buffer_client []*Client
+
 	commands chan jsonfile.Message
 }
 
@@ -19,55 +23,83 @@ func NewServer() *server {
 		commands: make(chan jsonfile.Message),
 	}
 }
-func (s *server) searching_member_client(member *jsonfile.Message) *client {
-	room := s.rooms[member.Room_name]
+func (s *server) searching_member_client(member *jsonfile.Message) (*Client, error) {
+	room, exists := s.rooms[member.Room_name]
+	if !exists {
+		return nil, fmt.Errorf("방 %s가 존재하지 않습니다", member.Room_name)
+	}
 
-	for address, client := range room.members {
-		if address.String() == member.Ip {
+	for _, client := range room.members {
+		if client.conn.RemoteAddr().String() == member.Ip {
+			return client, nil
+		}
+	}
+	return nil, fmt.Errorf("클라이언트 %s가 방 %s에 없습니다", member.Ip, member.Room_name)
+}
+
+func (s *server) find_client_no_room(cmd *jsonfile.Message) *Client {
+	for i, v := range s.buffer_client {
+		if v.conn.LocalAddr().String() == cmd.Ip {
+
+			client := s.buffer_client[i]
+			s.buffer_client = append(s.buffer_client[:i], s.buffer_client[i+1:]...) // 약간 세밀하게 다뤄 볼 것
 			return client
-		} else {
-			return nil
 		}
 	}
 	return nil
 }
 
-func (s *server) Run() {
+func (s *server) Run() { // 이것이 계속 돌아감
 	for cmd := range s.commands { // 여기서 받은 json파일을 분해해야만 한다.
+		client := new(Client)
+		var err error
+		if cmd.Room_name == "" {
+			client, err = s.searching_member_client(&cmd)
 
-		client := s.searching_member_client(&cmd)
+			if err != nil {
+				client = s.find_client_no_room(&cmd)
+				continue // 여기서 잘못되면 모든 곳이 종료
+			}
+		}
 		msg := cmd.Args
 		switch cmd.Id {
 		case int(CMD_NICK):
-			s.nick(client, cmd) // 메시지 전달
+			s.nick(client, cmd) // 메시지 전달 //
 
 		case int(CMD_JOIN):
-			s.join(client, cmd) // 방 입장
+			s.join(client, cmd) // 방 입장 //
 
 		case int(CMD_ROOMS):
-			s.listRooms(client) //
+			s.listRooms(client) // //
 
 		case int(CMD_MSG):
-			s.msg(client, msg)
+			s.msg(client, msg) //
 
 		case int(CMD_QUIT):
-			s.quit(client)
+			s.quit(client) //
 		}
 	}
 }
 
-func (s *server) NewClient(conn net.Conn) *client {
-	log.Printf("new client has joined: %s", conn.RemoteAddr().String())
+func (s *server) NewClient(conn net.Conn) *Client { // 새로운 클라이언트를 만듦 // 이것은 1번만 실행됨.
 
-	return &client{
-		conn:     conn,
+	log.Printf("new Client has joined: %s", (conn).RemoteAddr().String())
+
+	c := &Client{ // 클라이언트 생성
+		conn:     (conn),
 		nick:     "anonymous",
 		room:     nil,
 		Commands: s.commands,
 	}
+
+	/////////////////////  메세지 생성
+
+	s.buffer_client = append(s.buffer_client, c)
+
+	return c
 }
 
-func (s *server) nick(c *client, cmd jsonfile.Message) {
+func (s *server) nick(c *Client, cmd jsonfile.Message) {
 	if len(cmd.Client_name) < 2 || cmd.Client_name == "anonymous" {
 		c.msg("nick is required. usage: /nick NAME") // 메시지 보냄
 		return
@@ -77,7 +109,7 @@ func (s *server) nick(c *client, cmd jsonfile.Message) {
 	c.msg(fmt.Sprintf("all right, I will call you %s", c.nick))
 }
 
-func (s *server) join(c *client, cmd jsonfile.Message) {
+func (s *server) join(c *Client, cmd jsonfile.Message) {
 	if len(cmd.Args) < 2 {
 		c.msg("room name is required. usage: /join ROOM_NAME")
 		return
@@ -89,7 +121,7 @@ func (s *server) join(c *client, cmd jsonfile.Message) {
 	if !ok {
 		r = &room{
 			name:    roomName,
-			members: make(map[net.Addr]*client),
+			members: make(map[net.Addr]*Client),
 		}
 		s.rooms[roomName] = r
 	}
@@ -103,7 +135,7 @@ func (s *server) join(c *client, cmd jsonfile.Message) {
 	c.msg(fmt.Sprintf("welcome to %s", roomName))
 }
 
-func (s *server) listRooms(c *client) {
+func (s *server) listRooms(c *Client) {
 	var rooms []string
 	for name := range s.rooms {
 		rooms = append(rooms, name)
@@ -112,7 +144,7 @@ func (s *server) listRooms(c *client) {
 	c.msg(fmt.Sprintf("available rooms: %s", strings.Join(rooms, ", ")))
 }
 
-func (s *server) msg(c *client, msg string) {
+func (s *server) msg(c *Client, msg string) {
 
 	if c.room == nil {
 		fmt.Println("들어갈 방을 먼저 선택하세요.")
@@ -131,8 +163,8 @@ func (s *server) msg(c *client, msg string) {
 	c.room.broadcast(c, c.nick+": "+msg) // 메시지 수정 전달 // room.go로 이동
 }
 
-func (s *server) quit(c *client) {
-	log.Printf("client has left the chat: %s", c.conn.RemoteAddr().String())
+func (s *server) quit(c *Client) {
+	log.Printf("Client has left the chat: %s", c.conn.RemoteAddr().String())
 
 	s.quitCurrentRoom(c)
 
@@ -140,7 +172,7 @@ func (s *server) quit(c *client) {
 	c.conn.Close()
 }
 
-func (s *server) quitCurrentRoom(c *client) {
+func (s *server) quitCurrentRoom(c *Client) {
 	if c.room != nil {
 		oldRoom := s.rooms[c.room.name]
 		delete(s.rooms[c.room.name].members, c.conn.RemoteAddr())

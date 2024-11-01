@@ -2,10 +2,17 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+
+	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
+
+	serverclient "github.com/messager/TCP/Server_client"
+	jsonfile "github.com/messager/TCP/json_file"
 )
 
 func main() {
@@ -30,10 +37,10 @@ func main() {
 	done := make(chan struct{})
 
 	fmt.Println("서버에 연결되었습니다. 메시지를 입력하세요.")
-	wg.Add(2)
 
+	wg.Add(2)
+	go readResponses(&conn, &wg) // 서버 응답을 읽는 고루틴 시작
 	go WriteResponse(scanner, &conn, &wg, done)
-	go readResponses(conn, &wg) // 서버 응답을 읽는 고루틴 시작
 
 	if _, boolean := <-done; boolean {
 		fmt.Println("프로그램을 종료하겠습니다.")
@@ -50,9 +57,11 @@ func WriteResponse(scanner *bufio.Scanner, conn *net.Conn, wg *sync.WaitGroup, d
 	defer wg.Done()
 
 	for {
+		var err error
+		scanner.Scan()          // 사용자 입력 대기
+		input := scanner.Text() // 입력할 문자 출력
 
-		scanner.Scan() // 사용자 입력 대기
-		input := scanner.Text()
+		mssg := new(jsonfile.Message)
 
 		if input == "exit" { // 'exit' 입력 시 종료
 			fmt.Println("클라이언트 종료.")
@@ -62,29 +71,56 @@ func WriteResponse(scanner *bufio.Scanner, conn *net.Conn, wg *sync.WaitGroup, d
 
 		}
 
-		// 메시지를 서버로 전송
-		_, err := fmt.Fprintf(*conn, "%s\n", input)
+		sentences := strings.Split(input, " ")
+
+		mssg.Args = strings.Join(sentences[1:], " ")
+		mssg.Id, err = serverclient.Compare_cmd(sentences[0])
+		mssg.Ip = (*conn).LocalAddr().String()
+		mssg.Room_name = ""
+
+		fmt.Println(mssg.Args, mssg.Id, mssg.Ip, mssg.Room_name)
+
 		if err != nil {
-			continue
+			fmt.Println(err)
+		}
+
+		mb, err := mssg.Serialize()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		// 메시지를 서버로 전송
+		n, err := (*conn).Write(mb)
+		if err != nil {
+			fmt.Printf("메세지를 서버로 전송 불가: %s", err)
 		} else {
-			fmt.Println(input)
+			fmt.Println(input, "전송완료, size:", n)
 		}
 	}
 }
 
 // 서버로부터의 응답을 읽는 함수
-func readResponses(conn net.Conn, wg *sync.WaitGroup) {
+func readResponses(conn *net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	for {
-		reader := bufio.NewReader(conn) // 수신 리더 생성
+	if conn == nil {
+		log.Fatal("Connection is nil") // 연결이 nil일 경우 종료
+	}
 
-		response, err := reader.ReadString('\n') // 서버로부터의 응답 수신
+	for {
+		reader := bufio.NewReader(*conn)
+		line, err := reader.ReadBytes('\n')
 		if err != nil {
-			fmt.Println("서버와의 연결이 종료되었습니다:", err)
+			log.Println("Failed to read from connection:", err)
 			break
 		}
-		fmt.Println("서버로부터 수신된 메시지:", response) // 수신된 메시지 출력
-
+		line = bytes.Trim(line, "\x00") // 필요 시 trim
+		// JSON 역직렬화
+		msg := new(jsonfile.Message)
+		if msg, err = msg.UnSerialize(line); err != nil {
+			log.Println("UnSerialize error:", err)
+			continue
+		}
+		fmt.Println("서버로부터 수신된 메시지:", msg.Args)
 	}
 }
