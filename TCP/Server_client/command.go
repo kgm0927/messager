@@ -10,10 +10,8 @@ const (
 	CMD_QUIT                   // 4
 )
 
-/*
 type command struct {
 	id     commandID
-	client *client
-	args   []string
+	client *Client
+	args   string
 }
-*/

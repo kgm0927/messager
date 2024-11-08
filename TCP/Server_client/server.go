@@ -5,78 +5,65 @@ import (
 	"log"
 	"net"
 	"strings"
-
-	jsonfile "github.com/messager/TCP/json_file"
 )
 
 type server struct {
 	rooms map[string]*room
-
-	buffer_client []*Client
-
-	commands chan jsonfile.Message
+	// buffer_client []*Client
+	commands chan command
 }
 
 func NewServer() *server {
 	return &server{
 		rooms:    make(map[string]*room),
-		commands: make(chan jsonfile.Message),
+		commands: make(chan command),
 	}
 }
-func (s *server) searching_member_client(member *jsonfile.Message) (*Client, error) {
-	room, exists := s.rooms[member.Room_name]
-	if !exists {
-		return nil, fmt.Errorf("방 %s가 존재하지 않습니다", member.Room_name)
-	}
 
-	for _, client := range room.members {
-		if client.conn.RemoteAddr().String() == member.Ip {
-			return client, nil
-		}
-	}
-	return nil, fmt.Errorf("클라이언트 %s가 방 %s에 없습니다", member.Ip, member.Room_name)
-}
+// func (s *server) searching_member_client(member *jsonfile.Message) (*Client, error) {
+// 	room, exists := s.rooms[member.Room_name]
+// 	if !exists {
+// 		return nil, fmt.Errorf("방 %s가 존재하지 않습니다", member.Room_name)
+// 	}
 
-func (s *server) find_client_no_room(cmd *jsonfile.Message) *Client {
-	for i, v := range s.buffer_client {
-		if v.conn.LocalAddr().String() == cmd.Ip {
+// 	for _, client := range room.members {
+// 		if client.conn.RemoteAddr().String() == member.Ip {
+// 			return client, nil
+// 		}
+// 	}
+// 	return nil, fmt.Errorf("클라이언트 %s가 방 %s에 없습니다", member.Ip, member.Room_name)
+// }
 
-			client := s.buffer_client[i]
-			s.buffer_client = append(s.buffer_client[:i], s.buffer_client[i+1:]...) // 약간 세밀하게 다뤄 볼 것
-			return client
-		}
-	}
-	return nil
-}
+// func (s *server) find_client_no_room(cmd *jsonfile.Message) *Client {
+// 	for i, v := range s.buffer_client {
+// 		if v.conn.LocalAddr().String() == cmd.Ip {
+
+// 			client := s.buffer_client[i]
+
+// 			return client
+// 		}
+// 	}
+// 	return nil
+// }
 
 func (s *server) Run() { // 이것이 계속 돌아감
-	for cmd := range s.commands { // 여기서 받은 json파일을 분해해야만 한다.
-		client := new(Client)
-		var err error
-		if cmd.Room_name == "" {
-			client, err = s.searching_member_client(&cmd)
+	for cmd := range s.commands {
 
-			if err != nil {
-				client = s.find_client_no_room(&cmd)
-				continue // 여기서 잘못되면 모든 곳이 종료
-			}
-		}
-		msg := cmd.Args
-		switch cmd.Id {
+		switch int(cmd.id) {
 		case int(CMD_NICK):
-			s.nick(client, cmd) // 메시지 전달 //
+			s.nick(cmd.client, cmd.args) // 메시지 전달 //
 
 		case int(CMD_JOIN):
-			s.join(client, cmd) // 방 입장 //
+			s.join(cmd.client, cmd.args) // 방 입장 //
 
 		case int(CMD_ROOMS):
-			s.listRooms(client) // //
+			s.listRooms(cmd.client) // //
 
 		case int(CMD_MSG):
-			s.msg(client, msg) //
+			s.msg(cmd.client, cmd.args) //
 
 		case int(CMD_QUIT):
-			s.quit(client) //
+			s.quit(cmd.client) //
 		}
 	}
 }
@@ -94,31 +81,32 @@ func (s *server) NewClient(conn net.Conn) *Client { // 새로운 클라이언트
 
 	/////////////////////  메세지 생성
 
-	s.buffer_client = append(s.buffer_client, c)
+	// s.buffer_client = append(s.buffer_client, c)
 
 	return c
 }
 
-func (s *server) nick(c *Client, cmd jsonfile.Message) {
-	if len(cmd.Client_name) < 2 || cmd.Client_name == "anonymous" {
+func (s *server) nick(c *Client, cmd string) {
+	if len(cmd) < 2 || cmd == "anonymous" {
 		c.msg("nick is required. usage: /nick NAME") // 메시지 보냄
 		return
 	}
 
-	c.nick = cmd.Args
+	c.nick = cmd
 	c.msg(fmt.Sprintf("all right, I will call you %s", c.nick))
 }
 
-func (s *server) join(c *Client, cmd jsonfile.Message) {
-	if len(cmd.Args) < 2 {
+func (s *server) join(c *Client, cmd string) {
+	if c.room.name == "nothing" || cmd == "nothing" {
 		c.msg("room name is required. usage: /join ROOM_NAME")
 		return
 	}
 
-	roomName := cmd.Args
+	roomName := cmd
 
 	r, ok := s.rooms[roomName]
 	if !ok {
+
 		r = &room{
 			name:    roomName,
 			members: make(map[net.Addr]*Client),
