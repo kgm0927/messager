@@ -12,10 +12,11 @@ import (
 )
 
 type Client struct {
-	conn     net.Conn
-	nick     string
-	room     *room
-	Commands chan command
+	conn         net.Conn
+	nick         string
+	room         *room
+	Commands     chan command
+	Commands_buf command
 }
 
 // func (c *Client) Insert_message(M *jsonfile.Message) {
@@ -45,15 +46,16 @@ func (c *Client) ReadInput() { // 입력을 읽음.
 		slice := strings.Split(comm.args, " ") // /(명령어) 입력을 위해 잠시 쪼갬
 
 		cmd := reading.Id // 메시지 종료 알려줌
+		fmt.Println("cmd:", cmd)
+		fmt.Println("comm.args:", comm.args)
 		comm.id = commandID(cmd)
 		comm.client = c
 
 		switch cmd {
 		case int(CMD_NICK): // /nick
-			slice = slices.Insert[[]string, string](slice, 0, "/nick")
-			comm.args = strings.Join(slice, " ")
-
+			c.Commands_buf = *comm
 			c.Commands <- *comm
+			fmt.Println("여기까지 실행")
 
 		case int(CMD_JOIN): // /join
 			slice = slices.Insert[[]string, string](slice, 0, "/join")
@@ -105,40 +107,48 @@ func (c *Client) Setting_message_sentence(msg string) (cmd string, args []string
 	return cmd, msg_new
 }
 
-func (c *Client) Setting_Message_file(cmd string, msg []string) jsonfile.Message { // 사용하지 않음
+func (c *Client) Setting_Message_file(msg string) jsonfile.Message { // 사용하지 않음
 	setting := new(jsonfile.Message)
+	fmt.Println("여기까지 실행")
+	setting.Id = int(c.Commands_buf.id)
+	fmt.Println("114까지 실행")
+	setting.Args = msg // 나중에 문자열에 '>' 붙임
+	setting.Client_name = c.nick
 
-	cmd_num, err := Compare_cmd(cmd)
-
-	if err != nil {
-		fmt.Printf("%s", err)
+	if c.room != nil {
+		setting.Room_name = c.room.name
+	} else {
+		setting.Room_name = "nothing"
 	}
 
-	setting.Id = cmd_num
-	setting.Args = strings.Join(msg, " ") // 나중에 문자열에 '>' 붙임
-	setting.Client_name = c.nick
-	setting.Room_name = c.room.name
 	setting.Ip = c.conn.LocalAddr().String()
-
+	fmt.Println("여기까지 실행 119")
 	return *setting
 
 }
 
 func (c *Client) msg(msg string) { // 수정할 필요가 있어보임.
+	fmt.Println("msg 시작")
+	fmt.Println(msg)
 
-	// ----------------------------------------------- 문자열 분석 및 id 출력
+	// 명령어 없애기
 
-	str := strings.Split(msg, " ")
+	/////////////////////
 
-	sending := c.Setting_Message_file(str[0], str[1:])
+	sending := c.Setting_Message_file(msg)
+	fmt.Println("명령어 없애기 까지 완료")
+	fmt.Println(sending)
 	B, err := sending.Serialize()
 
 	if err != nil {
 		fmt.Println("%s", err)
 	}
-
-	c.conn.Write(B)
-
+	fmt.Println("메시지 보내기")
+	fmt.Println(B)
+	_, err = c.conn.Write(B)
+	if err != nil {
+		fmt.Println("전달에 문제가 있음:", err)
+	}
 }
 
 func Compare_cmd(cmd string) (int, error) {
@@ -170,6 +180,37 @@ func Compare_cmd(cmd string) (int, error) {
 
 	default:
 		return 100, fmt.Errorf("올바른 문자가 아님")
+	}
+}
+func Compare_cmd_str(cmd int) (string, error) {
+
+	switch cmd {
+	case int(CMD_NICK): //0
+		fmt.Println("전달은 0, /nick")
+		return "/nick", nil
+
+	case int(CMD_JOIN): // 1
+		fmt.Println("전달은 1, /join")
+
+		return "/join", nil
+
+	case int(CMD_ROOMS): // 2
+		fmt.Println("전달은 2, /rooms")
+
+		return "/rooms", nil
+
+	case int(CMD_MSG): // 3
+		fmt.Println("전달은 3, /msg")
+
+		return "/msg", nil
+
+	case int(CMD_QUIT): // 4
+		fmt.Println("전달은 4, /quit")
+
+		return "/quit", nil
+
+	default:
+		return "", fmt.Errorf("올바른 문자가 아님")
 	}
 }
 

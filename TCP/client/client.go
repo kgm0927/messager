@@ -42,10 +42,11 @@ func main() {
 
 	fmt.Println("서버에 연결되었습니다. 메시지를 입력하세요.")
 
-	wg.Add(2)
-	go readResponses(&conn, &wg) // 서버 응답을 읽는 고루틴 시작
-	go WriteResponse(scanner, &conn, &wg, done, basic_json_file)
-
+	for {
+		wg.Add(2)
+		go readResponses(&conn, &wg) // 서버 응답을 읽는 고루틴 시작
+		go WriteResponse(scanner, &conn, &wg, done, basic_json_file)
+	}
 	if _, boolean := <-done; boolean {
 		fmt.Println("프로그램을 종료하겠습니다.")
 
@@ -102,13 +103,13 @@ func WriteResponse(scanner *bufio.Scanner, conn *net.Conn, wg *sync.WaitGroup, d
 // 서버로부터의 응답을 읽는 함수
 func readResponses(conn *net.Conn, wg *sync.WaitGroup) {
 	defer wg.Done()
-
+	reader := bufio.NewReader(*conn)
 	if conn == nil {
 		log.Fatal("Connection is nil") // 연결이 nil일 경우 종료
 	}
 
 	for {
-		reader := bufio.NewReader(*conn)
+
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			log.Println("Failed to read from connection:", err)

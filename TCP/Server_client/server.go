@@ -51,6 +51,8 @@ func (s *server) Run() { // 이것이 계속 돌아감
 
 		switch int(cmd.id) {
 		case int(CMD_NICK):
+			fmt.Println("닉네임 만들기")
+
 			s.nick(cmd.client, cmd.args) // 메시지 전달 //
 
 		case int(CMD_JOIN):
@@ -60,6 +62,7 @@ func (s *server) Run() { // 이것이 계속 돌아감
 			s.listRooms(cmd.client) // //
 
 		case int(CMD_MSG):
+			fmt.Println("메시지 실행")
 			s.msg(cmd.client, cmd.args) //
 
 		case int(CMD_QUIT):
@@ -91,12 +94,18 @@ func (s *server) nick(c *Client, cmd string) {
 		c.msg("nick is required. usage: /nick NAME") // 메시지 보냄
 		return
 	}
-
+	fmt.Println("닉네임 만들기 시작")
 	c.nick = cmd
 	c.msg(fmt.Sprintf("all right, I will call you %s", c.nick))
 }
 
 func (s *server) join(c *Client, cmd string) {
+
+	if c.nick == "" || c.nick == "anonymous" {
+		fmt.Println("이름을 설정해 주시기 바랍니다. ")
+		return
+	}
+
 	if c.room.name == "nothing" || cmd == "nothing" {
 		c.msg("room name is required. usage: /join ROOM_NAME")
 		return
@@ -134,12 +143,14 @@ func (s *server) listRooms(c *Client) {
 
 func (s *server) msg(c *Client, msg string) {
 
-	if c.room == nil {
-		fmt.Println("들어갈 방을 먼저 선택하세요.")
-	}
-
 	if c.nick == "" || c.nick == "anonymous" {
 		fmt.Println("이름을 설정해 주시기 바랍니다. ")
+		return
+	}
+
+	if c.room == nil {
+		fmt.Println("들어갈 방을 먼저 선택하세요.")
+		return
 	}
 
 	if len(msg) < 2 {
