@@ -110,7 +110,7 @@ func readResponses(conn *net.Conn, wg *sync.WaitGroup) {
 
 	for {
 
-		line, err := reader.ReadBytes('\n')
+		line, err := reader.ReadBytes('}') // json의 제일 마지막에 '}'가 오므로 이렇게 해야 맞음.
 		if err != nil {
 			log.Println("Failed to read from connection:", err)
 			break
